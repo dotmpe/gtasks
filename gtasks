@@ -17,7 +17,7 @@ from hashlib import md5
 from apiclient.discovery import build
 from oauth2client.file import Storage
 from oauth2client.client import OAuth2WebServerFlow
-from oauth2client.tools import run
+from oauth2client.tools import run_flow
 
 # Parse arguments
 parser = argparse.ArgumentParser(
@@ -93,6 +93,12 @@ parser.add_argument('-lt', dest="show_limit", type=int, action='store', nargs='?
 parser.add_argument('-sn', dest="show_task_notes", action='store_true',
     help='show the task notes')
 
+parser.add_argument('-gn', dest="get_task_note", type=int, action='store', nargs='?',
+    help='get the note for task <number>')
+
+parser.add_argument('-gt', dest="get_task_title", type=int, action='store', nargs='?',
+    help='get the title for task <number>')
+
 parser.add_argument('-dsw', dest="show_task_when", action='store_false',
     help='don\'t show when the task is due')
 
@@ -161,13 +167,16 @@ class GTasks:
             self._settings = {}
             try:
                 list = Google_Tasks().service().tasklists().get(tasklist='@default').execute()
-                self._settings['default_list'] = list['title']
             except Exception as err:
-                if self.debug:
-                    print err['args']
-                    print err
+                #if self.debug:
+                print 'err.args', err.args
+                print 'err', err
+                print 'err.resp', err.resp
+                print 'err.content', err.content
+                print dir(err)
                 self._feedback('Error, problem talking with google api')
                 sys.exit(1)
+            self._settings['default_list'] = list['title']
         self.default_list = self._settings['default_list']
         if 'clear_cache_date' in self._settings:
             expired_cache = self._settings['clear_cache_date'] + datetime.timedelta(days=int(-2))
@@ -504,6 +513,21 @@ class GTasks:
         self.clear_cached_lists([list.resource['title']])
         self._background_update(show, [list.resource['title']])
 
+    def get_task_note(self, show, list, get_task):
+        list = self._get_list(show, list)
+        task = self._get_task(list, get_task['position'])
+
+        if 'notes' not in task.resource:
+            print 'no notes for task'
+        else:
+            print task.resource['notes']
+
+    def get_task_title(self, show, list, get_task):
+        list = self._get_list(show, list)
+        task = self._get_task(list, get_task['position'])
+
+        print task.resource['title']
+
     # edit a task
     def edit_task(self, show, list, edit_task):
         list = self._get_list(show, list)
@@ -530,7 +554,11 @@ class GTasks:
                 task.resource['deleted'] = True
         else:
             task.resource['title'] = edit_task['title']
-            task.resource['notes'] = edit_task['notes']
+            if edit_task['notes'] and edit_task['notes'].startswith('@'):
+                task.resource['notes'] = open(edit_task['@'][1:]).read()
+            else:
+                task.resource['notes'] = edit_task['notes']
+
             if edit_task['date']:
                 task.resource['due'] = edit_task['date']
 
@@ -890,7 +918,7 @@ class Google_Tasks:
             FLAGS = gflags.FLAGS
             FLAGS.auth_local_webserver = opts.webserver
 
-            Google_Tasks._credentials = run(FLOW, Google_Tasks._storage)
+            Google_Tasks._credentials = run_flow(FLOW, Google_Tasks._storage)
 
     # Return a service object to use to talk to the api
     def service(self):
@@ -1043,6 +1071,12 @@ try:
         amend_task = True
         task['position'] = opts.edit_task -1
         GTasks.edit_task(show, opts.lists, task)
+    elif opts.get_task_note:
+        task['position'] = opts.get_task_note -1
+        GTasks.get_task_note(show, opts.lists, task)
+    elif opts.get_task_title:
+        task['position'] = opts.get_task_title -1
+        GTasks.get_task_title(show, opts.lists, task)
     elif opts.complete_task:
         amend_task = True
         task['position'] = opts.complete_task -1
@@ -1068,7 +1102,9 @@ except KeyboardInterrupt:
       pass
 except Exception as err:
     if opts.debug:
-        print err
-        print 'Unexpected Error'
+        import traceback
+        tb = traceback.format_exc()
+        print tb
+        print 'Unexpected Error:', err
     else:
         print 'Error, unknown error, run with `--debug` for details'
