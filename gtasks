@@ -168,11 +168,13 @@ class GTasks:
             try:
                 list = Google_Tasks().service().tasklists().get(tasklist='@default').execute()
             except Exception as err:
+                import traceback
+                tb = traceback.format_exc()
+                print tb
                 #if self.debug:
                 print 'err.args', err.args
                 print 'err', err
-                print 'err.resp', err.resp
-                print 'err.content', err.content
+                print 'err.message', err.message
                 print dir(err)
                 self._feedback('Error, problem talking with google api')
                 sys.exit(1)
@@ -915,8 +917,9 @@ class Google_Tasks:
                 scope='https://www.googleapis.com/auth/tasks',
                 user_agent='gtasks/0.0.1')
 
-            FLAGS = gflags.FLAGS
-            FLAGS.auth_local_webserver = opts.webserver
+	    # keys seem to have changed? or FLAGS.define no longer in flow?
+            #FLAGS = gflags.FLAGS
+            #FLAGS.auth_local_webserver = opts.webserver
 
             Google_Tasks._credentials = run_flow(FLOW, Google_Tasks._storage)
 
